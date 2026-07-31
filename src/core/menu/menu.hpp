@@ -28,5 +28,6 @@ namespace Menu {
     namespace CustomWidgets {
         void drawKeyBinder(const char* label, int* key, bool* toggled);
         bool isKeyDown(int key);
+        bool isKeyPressed(int key);
     }
 }

@@ -60,6 +60,12 @@ public:
 		return getVirtualFunc<Fn>(this, 12)(this);
 	}
 
+	const Vector& abs_origin()
+	{
+		typedef const Vector& (*Fn)(void*);
+		return getVirtualFunc<Fn>(this, 10)(this);
+	}
+
 	void setModelIndex(int index) {
 		typedef void (*Fn)(void*, int);
 		getVirtualFunc<Fn>(this, 111)(this, index);

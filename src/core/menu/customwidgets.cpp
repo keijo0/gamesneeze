@@ -70,3 +70,17 @@ bool Menu::CustomWidgets::isKeyDown(int key) {
     }
     return 0;
 }
+
+bool Menu::CustomWidgets::isKeyPressed(int key) {
+    if (key > 0) {
+        return ImGui::IsKeyPressed(key);
+    }
+    switch(key) {
+        case -1: return ImGui::IsMouseClicked(0);
+        case -2: return ImGui::IsMouseClicked(1);
+        case -3: return ImGui::IsMouseClicked(2);
+        case -4: return ImGui::IsMouseClicked(3);
+        case -5: return ImGui::IsMouseClicked(4);
+    }
+    return 0;
+}

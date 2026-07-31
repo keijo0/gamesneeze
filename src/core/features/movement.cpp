@@ -11,6 +11,7 @@ namespace {
     float flBugSpeed = 0.f;
     bool jumpBugAGFix = false;
     static float startCircle = 0.f;
+    static Vector wallPosition;
 
     struct PointCheck {
         Vector Pos;
@@ -20,6 +21,39 @@ namespace {
     static bool seccheckcros = false;
     static bool HITGODA = false;
     static bool togglechecksurflolkek = false;
+    static bool HitJump = false;
+    static bool HitMiniJump = false;
+    static bool HitLongJump = false;
+    static bool HitCHop = false;
+    static bool HitJumpBug = false;
+    static bool ChatStand = false;
+    static bool ChatDuck = false;
+    static Vector ChatPositions;
+
+    bool check(float a, float b) {
+        int a1 = (int)a;
+        int b1 = (int)b;
+        if (b < 0) {
+            if (a1 == b1) {
+                int a2 = (int)((a - a1) * 100);
+                int b2 = (int)((b - b1) * 100);
+                if (b2 == a2 || a2 + 1 == b2 || a2 + 2 == b2)
+                    return true;
+                else
+                    return false;
+            }
+        } else {
+            if (a1 == b1) {
+                int a2 = (int)((a - a1) * 100);
+                int b2 = (int)((b - b1) * 100);
+                if (b2 == a2 || a2 == b2 - 1 || a2 == b2 - 2)
+                    return true;
+                else
+                    return false;
+            }
+        }
+        return false;
+    }
 }
 
 void bhop(CUserCmd *cmd) {
@@ -221,6 +255,41 @@ void pixelSurf(CUserCmd *cmd) {
     if (!Features::Prediction::inPrediction)
         return;
 
+    // Collideable check like lobotomy
+    auto collideable = &Globals::localPlayer->collideable();
+    if (!collideable)
+        return;
+
+    // Wall detection - must run before prediction logic
+    if (Globals::localPlayer->velocity().z != -6.25f && flZVelBackup != -6.25f)
+        startCircle = 0.f;
+
+    Awall = false;
+    Trace trace;
+    float step = (float)M_PI * 2.0f / 16.f;
+    Vector wallPosition;
+
+    for (float a = startCircle; a < (M_PI * 2.0f); a += step) {
+        Vector wishdir = Vector(cosf(a), sinf(a), 0.f);
+        const auto startPos = Globals::localPlayer->abs_origin();
+        const auto endPos = startPos + wishdir;
+
+        CTraceFilterWorldOnly filter;
+        Ray ray;
+        ray.Init(startPos, endPos, Globals::localPlayer->collideable().OBBMins(), Globals::localPlayer->collideable().OBBMaxs());
+        Interfaces::trace->TraceRay(ray, MASK_PLAYERSOLID, &filter, &trace);
+
+        if ((trace.fraction < 1.f) && (trace.plane.normal.z == 0.f)) {
+            wallPosition = trace.endpos;
+            startCircle = a;
+            Awall = true;
+            break;
+        }
+    }
+
+    if (!Awall)
+        return;
+
     if (!should_pixelsurf) {
         int nCommandsPredicted = Interfaces::prediction->Split[0].nCommandsPredicted;
         int BackupButtons = cmd->buttons;
@@ -292,6 +361,12 @@ void autoAlign(CUserCmd *cmd) {
     if (Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>FireMan Key")))
         return;
 
+    // Collideable check like lobotomy
+    auto collideable = &Globals::localPlayer->collideable();
+    if (!collideable)
+        return;
+
+    // Wall detection - always run like lobotomy
     Trace trace;
     float step = (float)M_PI * 2.0f / 16.f;
     Awall = false;
@@ -302,14 +377,13 @@ void autoAlign(CUserCmd *cmd) {
     Vector wallPosition{};
     for (float a = startCircle; a < (M_PI * 2.0f); a += step) {
         Vector wishdir = Vector(cosf(a), sinf(a), 0.f);
-        const auto startPos = Globals::localPlayer->origin();
+        const auto startPos = Globals::localPlayer->abs_origin();
         const auto endPos = startPos + wishdir;
 
-        TraceFilter filter;
-        filter.pSkip = Globals::localPlayer;
+        CTraceFilterWorldOnly filter;
         Ray ray;
-        ray.Init(startPos, endPos);
-        Interfaces::trace->TraceRay(ray, 0x4600400B, &filter, &trace);
+        ray.Init(startPos, endPos, Globals::localPlayer->collideable().OBBMins(), Globals::localPlayer->collideable().OBBMaxs());
+        Interfaces::trace->TraceRay(ray, MASK_PLAYERSOLID, &filter, &trace);
 
         if ((trace.fraction < 1.f) && (trace.plane.normal.z == 0.f)) {
             wallPosition = trace.endpos;
@@ -318,6 +392,9 @@ void autoAlign(CUserCmd *cmd) {
             break;
         }
     }
+
+    if (!Awall)
+        return;
 
     if (Awall && !Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>Airstuck Key"))) {
         int nCommandsPredicted = Interfaces::prediction->Split[0].nCommandsPredicted;
@@ -360,7 +437,7 @@ void autoAlign(CUserCmd *cmd) {
         Vector startPos = Vector(Globals::localPlayer->origin().x, Globals::localPlayer->origin().y, wallPosition.z);
         Vector endPos = startPos + normalPlane * 64.f;
         ray.Init(Globals::localPlayer->origin(), endPos);
-        Interfaces::trace->TraceRay(ray, 0x4600400B, &filter, &secTrace);
+        Interfaces::trace->TraceRay(ray, MASK_PLAYERSOLID, &filter, &secTrace);
 
         if (secTrace.fraction > 0.249715533f || 
             !(cmd->buttons & IN_FORWARD) && !(cmd->buttons & IN_BACK) && 
@@ -594,7 +671,7 @@ void checkSurf(CUserCmd *cmd) {
 
     static int toggletime = 0;
 
-    if (Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>CheckSurf Point Key"))) {
+    if (Menu::CustomWidgets::isKeyPressed(CONFIGINT("Misc>Misc>Movement>CheckSurf Point Key")) && !seccheckcros) {
         QAngle viewangle = QAngle(cmd->viewangles.x, cmd->viewangles.y, 0.f);
         Vector direction;
         angleVectors(viewangle, direction);
@@ -605,7 +682,7 @@ void checkSurf(CUserCmd *cmd) {
         filter.pSkip = Globals::localPlayer;
         Ray ray;
         ray.Init(Globals::localPlayer->eyePos(), endPos);
-        Interfaces::trace->TraceRay(ray, 0x4600400B, &filter, &trace);
+        Interfaces::trace->TraceRay(ray, MASK_PLAYERSOLID, &filter, &trace);
 
         if (trace.fraction == 1.f) {
             return;
@@ -613,17 +690,24 @@ void checkSurf(CUserCmd *cmd) {
 
         PointCheck point;
         point.Pos = Globals::localPlayer->eyePos() + (endPos - Globals::localPlayer->eyePos()) * trace.fraction;
-        point.Map = ""; // Simplified - map name not critical for basic functionality
+        point.Map = "";
         PointsCheck.push_back(point);
     }
 
-    if (Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>CheckSurf Key")) && toggletime < Interfaces::globals->tickcount) {
-        toggletime = Interfaces::globals->tickcount + 30;
-        togglechecksurflolkek = !togglechecksurflolkek;
+    if (CONFIGBOOL("Misc>Misc>Movement>CheckSurf")) {
+        if (Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>CheckSurf Key")) && toggletime < Interfaces::globals->tickcount) {
+            toggletime = Interfaces::globals->tickcount + 30;
+            togglechecksurflolkek = !togglechecksurflolkek;
+        }
     }
 
     if (!Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>CheckSurf Key")) && !togglechecksurflolkek) {
         HITGODA = false;
+        HitJump = false;
+        HitMiniJump = false;
+        HitLongJump = false;
+        HitCHop = false;
+        HitJumpBug = false;
         return;
     }
 
@@ -641,6 +725,8 @@ void checkSurf(CUserCmd *cmd) {
     }
 
     Vector Surf = PointsCheck.at(index).Pos;
+    Vector Calculate;
+    float iCalcilate = 0.f;
 
     int BackupButtons = cmd->buttons;
     float ForwaMove = cmd->forwardmove;
@@ -648,6 +734,151 @@ void checkSurf(CUserCmd *cmd) {
 
     int BackupPredicted = Interfaces::prediction->Split[0].nCommandsPredicted;
     static int ticks = 0;
+    static int ljticks = 0;
+    int g = (Features::Movement::flagsBackup & 1) ? 3 : 5;
+    int hitgroudtick = 0;
+
+    if (flZVelBackup < 0.f)
+        ljticks = 0;
+
+    for (int v = 0; v < g; v++) {
+        cmd->sidemove = 0.f;
+        cmd->forwardmove = 0.f;
+        cmd->buttons = BackupButtons;
+
+        Features::Prediction::restoreEntityToPredictedFrame(BackupPredicted - 1);
+        
+        int backflags = Globals::localPlayer->flags();
+        Vector OldLocalPlaerOrigin = Globals::localPlayer->origin();
+        Vector OldLocalPlayerVelocity = Globals::localPlayer->velocity();
+        
+        int once = 0;
+        if (!HitJump && !HitMiniJump && !HitLongJump && !HitCHop) {
+            for (int i = 0; i < 48; i++) {
+                if (Globals::localPlayer->flags() & 1)
+                    once += 1;
+
+                if (once == 1)
+                    ChatPositions = Globals::localPlayer->origin();
+
+                if (v == 0) {
+                    if (Globals::localPlayer->flags() & 1)
+                        cmd->buttons |= IN_JUMP;
+                }
+                if (v == 1) {
+                    if (Globals::localPlayer->flags() & 1) {
+                        cmd->buttons |= IN_JUMP;
+                        cmd->buttons |= IN_DUCK;
+                    }
+                }
+                if (v == 2) {
+                    if (Globals::localPlayer->flags() & 1) {
+                        cmd->buttons |= IN_JUMP;
+                        cmd->buttons |= IN_DUCK;
+                    }
+                }
+                if (!(Globals::localPlayer->flags() & 1) && v != 3 && v != 4) {
+                    cmd->buttons &= ~IN_DUCK;
+                    cmd->buttons &= ~IN_JUMP;
+                }
+                if (v == 3) {
+                    if (Globals::localPlayer->flags() & 1)
+                        cmd->buttons |= IN_JUMP;
+                    cmd->buttons |= IN_DUCK;
+                }
+                if (v == 4) {
+                    if (i == hitgroudtick) {
+                        cmd->buttons |= IN_DUCK;
+                        cmd->buttons &= ~IN_JUMP;
+                        once += 1;
+                    } else {
+                        cmd->buttons &= ~IN_DUCK;
+                        cmd->buttons |= IN_JUMP;
+                    }
+                }
+
+                backflags = Globals::localPlayer->flags();
+                OldLocalPlaerOrigin = Globals::localPlayer->origin();
+                OldLocalPlayerVelocity = Globals::localPlayer->velocity();
+
+                Features::Prediction::start(cmd);
+                Features::Prediction::end();
+                BackupPredicted = Interfaces::prediction->Split[0].nCommandsPredicted;
+
+                if (v == 2) {
+                    if (Globals::localPlayer->flags() & 1 && !(backflags & 1))
+                        hitgroudtick = i;
+                }
+
+                if (!(Globals::localPlayer->flags() & 1) && v != 3 && v != 4) {
+                    cmd->buttons &= ~IN_DUCK;
+                    cmd->buttons &= ~IN_JUMP;
+                }
+
+                if (backflags & 1 && !(Globals::localPlayer->flags() & 1) && v == 2) {
+                    Vector newOrigin = Globals::localPlayer->origin();
+                    newOrigin.z += 8.9999704f;
+                }
+
+                Vector PredictedLocalPlayerOrigin = Globals::localPlayer->origin();
+                Vector PredictedLocalPlayerVelocity = Globals::localPlayer->velocity();
+                iCalcilate = 0.f;
+
+                if (OldLocalPlayerVelocity.z > 0.f && PredictedLocalPlayerVelocity.z < 0.f && !iCalcilate && once == 1) {
+                    Calculate = OldLocalPlaerOrigin;
+                    iCalcilate = OldLocalPlaerOrigin.z - PredictedLocalPlayerOrigin.z;
+                    once += 1;
+                }
+
+                if (iCalcilate) {
+                    float z = 0;
+                    while (Calculate.z > Surf.z - 20.f) {
+                        if (check(Calculate.z, Surf.z)) {
+                            if (v == 0)
+                                HitJump = true;
+                            if (v == 1)
+                                HitMiniJump = true;
+                            if (v == 2)
+                                HitLongJump = true;
+                            if (v == 3)
+                                HitCHop = true;
+                            if (v == 4)
+                                HitJumpBug = true;
+                            ChatStand = true;
+                            ticks = cmd->tick_count + i + 2;
+                        }
+                        if (check(Calculate.z + 9.f, Surf.z)) {
+                            if (v == 0)
+                                HitJump = true;
+                            if (v == 1)
+                                HitMiniJump = true;
+                            if (v == 2)
+                                HitLongJump = true;
+                            if (v == 4)
+                                HitJumpBug = true;
+                            ChatDuck = true;
+                            ticks = cmd->tick_count + i + 2;
+                        }
+                        if (v == 3 && check(Calculate.z - 9.f, Surf.z)) {
+                            ChatStand = true;
+                            HitCHop = true;
+                            ticks = cmd->tick_count + i + 2;
+                        }
+
+                        float o = z * (z + 1) / 2;
+                        float p = iCalcilate + (0.1953125 * z);
+                        Calculate.z = Calculate.z - p;
+                        z += 1;
+                    }
+                }
+            }
+        }
+    }
+
+    cmd->buttons = BackupButtons;
+    cmd->forwardmove = ForwaMove;
+    cmd->sidemove = SideMove;
+    Features::Prediction::restoreEntityToPredictedFrame(BackupPredicted - 1);
 
     if (flZVelBackup > -19.f) {
         ticks = 0;
@@ -663,6 +894,40 @@ void checkSurf(CUserCmd *cmd) {
         cmd->mousedy = 0;
     } else {
         HITGODA = false;
+    }
+
+    if (flZVelBackup > 0.f) {
+        if (HitJumpBug && !ChatPositions.IsZero()) {
+            // Could add notification here
+        }
+        HitCHop = false;
+        HitJumpBug = false;
+    }
+
+    cmd->buttons = BackupButtons;
+    if (HitCHop) {
+        cmd->buttons |= IN_DUCK;
+        if (Features::Movement::flagsBackup & 1)
+            cmd->buttons |= IN_JUMP;
+    }
+    if (HitJump && Features::Movement::flagsBackup & 1) {
+        cmd->buttons |= IN_JUMP;
+        HitJump = false;
+    }
+    if (HitMiniJump && Features::Movement::flagsBackup & 1) {
+        cmd->buttons |= IN_JUMP;
+        cmd->buttons |= IN_DUCK;
+        HitMiniJump = false;
+    }
+    if (HitLongJump && Features::Movement::flagsBackup & 1) {
+        cmd->buttons |= IN_JUMP;
+        cmd->buttons |= IN_DUCK;
+        HitLongJump = false;
+    }
+    if (HitJumpBug && Features::Movement::flagsBackup & 1) {
+        cmd->buttons |= IN_DUCK;
+        cmd->buttons &= ~IN_JUMP;
+        HitJumpBug = false;
     }
 }
 
