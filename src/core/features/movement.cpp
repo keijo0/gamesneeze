@@ -11,6 +11,15 @@ namespace {
     float flBugSpeed = 0.f;
     bool jumpBugAGFix = false;
     static float startCircle = 0.f;
+
+    struct PointCheck {
+        Vector Pos;
+        std::string Map;
+    };
+    static std::vector<PointCheck> PointsCheck;
+    static bool seccheckcros = false;
+    static bool HITGODA = false;
+    static bool togglechecksurflolkek = false;
 }
 
 void bhop(CUserCmd *cmd) {
@@ -493,6 +502,170 @@ void fireMan(CUserCmd *cmd) {
     }
 }
 
+void autoBounce(CUserCmd *cmd) {
+    if (!CONFIGBOOL("Misc>Misc>Movement>AutoBounce"))
+        return;
+
+    if (!Globals::localPlayer)
+        return;
+
+    if (!Globals::localPlayer->health())
+        return;
+
+    if (Globals::localPlayer->moveType() == MOVETYPE_NOCLIP || 
+        Globals::localPlayer->moveType() == MOVETYPE_OBSERVER || 
+        Globals::localPlayer->moveType() == MOVETYPE_LADDER)
+        return;
+
+    if (Features::Movement::flagsBackup & FL_ONGROUND || Features::Movement::flagsBackup & FL_DUCKING)
+        return;
+
+    if (should_pixelsurf)
+        return;
+
+    if (Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>EdgeBug Key")) ||
+        Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>JumpBug Key")) ||
+        Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>AutoBounce Key")))
+        return;
+
+    float timepredicted = 0.f;
+    float savedzpos = -999999.f;
+    bool foundground = false;
+    CUserCmd savedcmd = *cmd;
+
+    Features::Prediction::restoreEntityToPredictedFrame(Interfaces::prediction->Split[0].nCommandsPredicted - 1);
+
+    while (timepredicted < 0.05f && !(Globals::localPlayer->flags() & FL_ONGROUND)) {
+        cmd->buttons |= IN_DUCK;
+        Features::Prediction::start(cmd);
+        Features::Prediction::end();
+        if (Globals::localPlayer->flags() & FL_ONGROUND) {
+            foundground = true;
+            savedzpos = Globals::localPlayer->origin().z;
+            break;
+        } else {
+            timepredicted += Interfaces::globals->interval_per_tick;
+        }
+    }
+
+    bool foundgstanding = false;
+    float savedzposstanding = -999999.f;
+
+    if (foundground && savedzpos != -999999.f) {
+        *cmd = savedcmd;
+        Features::Prediction::restoreEntityToPredictedFrame(Interfaces::prediction->Split[0].nCommandsPredicted - 1);
+
+        timepredicted = 0.f;
+
+        while (timepredicted < 0.05f && !(Globals::localPlayer->flags() & FL_ONGROUND)) {
+            cmd->buttons &= ~IN_DUCK;
+            Features::Prediction::start(cmd);
+            Features::Prediction::end();
+            if (Globals::localPlayer->flags() & FL_ONGROUND) {
+                foundgstanding = true;
+                savedzposstanding = Globals::localPlayer->origin().z;
+                break;
+            } else {
+                timepredicted += Interfaces::globals->interval_per_tick;
+            }
+        }
+    }
+
+    if (foundground && foundgstanding) {
+        if (savedzpos > savedzposstanding) {
+            cmd->buttons |= IN_DUCK;
+        }
+    } else if (foundground && !foundgstanding) {
+        cmd->buttons |= IN_DUCK;
+    } else {
+        *cmd = savedcmd;
+    }
+}
+
+void checkSurf(CUserCmd *cmd) {
+    if (!CONFIGBOOL("Misc>Misc>Movement>CheckSurf"))
+        return;
+
+    if (!Globals::localPlayer)
+        return;
+
+    if (!Globals::localPlayer->health())
+        return;
+
+    static int toggletime = 0;
+
+    if (Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>CheckSurf Point Key"))) {
+        QAngle viewangle = QAngle(cmd->viewangles.x, cmd->viewangles.y, 0.f);
+        Vector direction;
+        angleVectors(viewangle, direction);
+        const auto endPos = Globals::localPlayer->eyePos() + direction * 2000.f;
+
+        Trace trace;
+        TraceFilter filter;
+        filter.pSkip = Globals::localPlayer;
+        Ray ray;
+        ray.Init(Globals::localPlayer->eyePos(), endPos);
+        Interfaces::trace->TraceRay(ray, 0x4600400B, &filter, &trace);
+
+        if (trace.fraction == 1.f) {
+            return;
+        }
+
+        PointCheck point;
+        point.Pos = Globals::localPlayer->eyePos() + (endPos - Globals::localPlayer->eyePos()) * trace.fraction;
+        point.Map = ""; // Simplified - map name not critical for basic functionality
+        PointsCheck.push_back(point);
+    }
+
+    if (Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>CheckSurf Key")) && toggletime < Interfaces::globals->tickcount) {
+        toggletime = Interfaces::globals->tickcount + 30;
+        togglechecksurflolkek = !togglechecksurflolkek;
+    }
+
+    if (!Menu::CustomWidgets::isKeyDown(CONFIGINT("Misc>Misc>Movement>CheckSurf Key")) && !togglechecksurflolkek) {
+        HITGODA = false;
+        return;
+    }
+
+    if (PointsCheck.empty())
+        return;
+
+    int index = 0;
+    float Nearest = 99999.f;
+    for (size_t i = 0; i < PointsCheck.size(); i++) {
+        float dist = Globals::localPlayer->origin().DistTo(PointsCheck.at(i).Pos);
+        if (Nearest > dist) {
+            Nearest = dist;
+            index = i;
+        }
+    }
+
+    Vector Surf = PointsCheck.at(index).Pos;
+
+    int BackupButtons = cmd->buttons;
+    float ForwaMove = cmd->forwardmove;
+    float SideMove = cmd->sidemove;
+
+    int BackupPredicted = Interfaces::prediction->Split[0].nCommandsPredicted;
+    static int ticks = 0;
+
+    if (flZVelBackup > -19.f) {
+        ticks = 0;
+        HITGODA = false;
+    }
+
+    if (cmd->tick_count < ticks) {
+        HITGODA = true;
+        cmd->forwardmove = 0.f;
+        cmd->sidemove = 0.f;
+        cmd->buttons = 0;
+        cmd->mousedx = 0;
+        cmd->mousedy = 0;
+    } else {
+        HITGODA = false;
+    }
+}
+
 bool checkEdgebug() {
     static ConVar *sv_gravity = Interfaces::convar->FindVar("sv_gravity");
     float edgebugZVel =
@@ -531,6 +704,8 @@ void Features::Movement::postPredCreateMove(CUserCmd *cmd) {
     pixelSurf(cmd);
     autoAlign(cmd);
     fireMan(cmd);
+    autoBounce(cmd);
+    checkSurf(cmd);
     jumpBug(cmd);
 }
 

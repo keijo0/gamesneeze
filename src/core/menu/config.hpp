@@ -343,6 +343,13 @@ namespace Config {
             CONFIGITEM("Misc>Misc>Movement>FireMan Key", 0),
             CONFIGITEM("Misc>Misc>Movement>Airstuck", false),
             CONFIGITEM("Misc>Misc>Movement>Airstuck Key", 0),
+            CONFIGITEM("Misc>Misc>Movement>AutoBounce", false),
+            CONFIGITEM("Misc>Misc>Movement>AutoBounce Key", 0),
+            CONFIGITEM("Misc>Misc>Movement>CheckSurf", false),
+            CONFIGITEM("Misc>Misc>Movement>CheckSurf Key", 0),
+            CONFIGITEM("Misc>Misc>Movement>CheckSurf Point Key", 0),
+            CONFIGITEM("Misc>Misc>Movement>PixelSurf Calc", false),
+            CONFIGITEM("Misc>Misc>Movement>Draw PixelSurf", false),
             CONFIGITEM("Misc>Misc>Movement>Show Indicators", false),
             CONFIGITEM("Misc>Misc>Movement>Fast Duck", false),
 

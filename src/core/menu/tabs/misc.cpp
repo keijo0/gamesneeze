@@ -139,6 +139,23 @@ void Menu::drawMiscTab() {
                     ImGui::SameLine();
                 }
                 ImGui::Checkbox("Airstuck", &CONFIGBOOL("Misc>Misc>Movement>Airstuck"));
+                if (CONFIGBOOL("Misc>Misc>Movement>AutoBounce")) {
+                    static bool toggled = false;
+                    Menu::CustomWidgets::drawKeyBinder("Key", &CONFIGINT("Misc>Misc>Movement>AutoBounce Key"), &toggled);
+                    ImGui::SameLine();
+                }
+                ImGui::Checkbox("AutoBounce", &CONFIGBOOL("Misc>Misc>Movement>AutoBounce"));
+                if (CONFIGBOOL("Misc>Misc>Movement>CheckSurf")) {
+                    static bool toggled = false;
+                    Menu::CustomWidgets::drawKeyBinder("Toggle", &CONFIGINT("Misc>Misc>Movement>CheckSurf Key"), &toggled);
+                    ImGui::SameLine();
+                    static bool toggled2 = false;
+                    Menu::CustomWidgets::drawKeyBinder("Point", &CONFIGINT("Misc>Misc>Movement>CheckSurf Point Key"), &toggled2);
+                    ImGui::SameLine();
+                }
+                ImGui::Checkbox("CheckSurf", &CONFIGBOOL("Misc>Misc>Movement>CheckSurf"));
+                ImGui::Checkbox("PixelSurf Calc", &CONFIGBOOL("Misc>Misc>Movement>PixelSurf Calc"));
+                ImGui::Checkbox("Draw PixelSurf", &CONFIGBOOL("Misc>Misc>Movement>Draw PixelSurf"));
                 if (CONFIGBOOL("Misc>Misc>Movement>JumpBug")) {
                     static bool toggled = false;
                     Menu::CustomWidgets::drawKeyBinder("Key", &CONFIGINT("Misc>Misc>Movement>JumpBug Key"), &toggled);
